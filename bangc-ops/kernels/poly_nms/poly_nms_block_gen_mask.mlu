@@ -98,6 +98,7 @@ __mlu_func__ static inline void MLUGenNMSMaskImpl(
   //   }
   // }
 
+  // __sync_io();
   __asm__ volatile("sync;");
 
   for (int i = box_i_beg; i < box_i_end; i += 1) {
