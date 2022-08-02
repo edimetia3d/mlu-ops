@@ -27,8 +27,8 @@ __mlu_func__ static inline float IOU(
     const QuadClipBox<POINT_DIR> *__restrict__ clipbox,
     const float *__restrict__ box_j, float area_i, float area_j) {
   float intersect = IntersectArea<POINT_DIR>(box_j, clipbox);
-  // __bang_printf("--taskId:%d--area_i:%f, area_j:%f----intersect:%f \n", taskId, area_i, area_j, intersect);
-  return intersect / (area_i + area_j - intersect);
+ // __bang_printf("--taskId:%d--area_i:%f, area_j:%f----intersect:%f \n", taskId, area_i, area_j, intersect);
+  return intersect/ (area_i + area_j - intersect);
 }
 
 __mlu_func__ static inline void MaySuppress(uint32_t *mask, int j) {
@@ -92,24 +92,19 @@ __mlu_func__ static inline void MLUGenNMSMaskImpl(
   GetCoreWorkingSet(input_boxes_num, &core_box_num, &box_i_beg);
   int box_i_end = box_i_beg + core_box_num;
   box_i_end = box_i_end < input_boxes_num ? box_i_end : input_boxes_num;
-  // if(taskId == 0){
-  //   for(int j = 0; j < input_boxes_num; j++){
-  //     __bang_printf("-genmask--area_buffer[%d]:%f \n", j,  area_buffer[j]);
-  //   }
-  // }
 
-  // __sync_io();
-  __asm__ volatile("sync;");
+  __sync_io();
+  // __asm__ volatile("sync;");
 
   for (int i = box_i_beg; i < box_i_end; i += 1) {
     int i_pos = 0;
     float *box_i = &box_buffer[i * 9];
     QuadClipBox<POINT_DIR> clip_box;
-    clip_box.AddLines((const Point2D *)((void *)box_i));
-    // clip_box.AddLines(reinterpret_cast<const Point2D *>(box_i));
+    clip_box.AddLines(reinterpret_cast<const Point2D *>(box_i));
 
     float score_i = box_i[8];
     for (int j = 0; j < input_boxes_num; ++j) {
+      printf("%d %d\n",i, j);
       if (i == j) {
         continue;
       }
@@ -137,6 +132,7 @@ __mlu_func__ static inline void MLUGenNMSMaskImpl(
     mask_buffer_swap = tmp;
     __bang_write_value(mask_buffer_swap, mask_buffer_num,
                        default_mask_v);  // reset to all 1
+                      __sync_compute();
   }
 }
 
