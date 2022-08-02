@@ -27,7 +27,6 @@ __mlu_func__ static inline float IOU(
     const QuadClipBox<POINT_DIR> *__restrict__ clipbox,
     const float *__restrict__ box_j, float area_i, float area_j) {
   float intersect = IntersectArea<POINT_DIR>(box_j, clipbox);
- // __bang_printf("--taskId:%d--area_i:%f, area_j:%f----intersect:%f \n", taskId, area_i, area_j, intersect);
   return intersect/ (area_i + area_j - intersect);
 }
 
@@ -77,7 +76,7 @@ __mlu_func__ static inline void MLUGenNMSMaskImpl(
    // load box area into nram
   float *area_buffer = box_buffer + box_buffer_num;
   __memcpy_async(area_buffer, boxes_area, input_boxes_num * sizeof(float),
-                 GDRAM2NRAM); // _async
+                 GDRAM2NRAM);
 
   // create mask_buffer for a single row
   constexpr uint32_t allones = 0xFFFFFFFF;
@@ -104,7 +103,6 @@ __mlu_func__ static inline void MLUGenNMSMaskImpl(
 
     float score_i = box_i[8];
     for (int j = 0; j < input_boxes_num; ++j) {
-      printf("%d %d\n",i, j);
       if (i == j) {
         continue;
       }
