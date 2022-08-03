@@ -27,7 +27,7 @@ __mlu_func__ static inline float IOU(
     const QuadClipBox<POINT_DIR> *__restrict__ clipbox,
     const float *__restrict__ box_j, float area_i, float area_j) {
   float intersect = IntersectArea<POINT_DIR>(box_j, clipbox);
-  return intersect/ (area_i + area_j - intersect);
+  return intersect / (area_i + area_j - intersect);
 }
 
 __mlu_func__ static inline void MaySuppress(uint32_t *mask, int j) {
@@ -73,7 +73,7 @@ __mlu_func__ static inline void MLUGenNMSMaskImpl(
   mask_buffer_num = CEIL_ALIGN(mask_col_num, align_num);
   area_buffer_num = CEIL_ALIGN(area_buffer_num, align_num);
 #endif
-   // load box area into nram
+  // load box area into nram
   float *area_buffer = box_buffer + box_buffer_num;
   __memcpy_async(area_buffer, boxes_area, input_boxes_num * sizeof(float),
                  GDRAM2NRAM);
@@ -129,7 +129,7 @@ __mlu_func__ static inline void MLUGenNMSMaskImpl(
     mask_buffer_swap = tmp;
     __bang_write_value(mask_buffer_swap, mask_buffer_num,
                        default_mask_v);  // reset to all 1
-                      __sync_compute();
+    __sync_compute();
   }
 }
 

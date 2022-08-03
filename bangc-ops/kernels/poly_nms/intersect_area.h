@@ -196,5 +196,5 @@ __mlu_func__ inline float IntersectArea(
 
   return area > 0 ? area : -area;
 }
-} //namespace
+}  // namespace
 #endif  // BANGC_OPS_KERNELS_POLY_NMS_INTERSECT_AREA_H

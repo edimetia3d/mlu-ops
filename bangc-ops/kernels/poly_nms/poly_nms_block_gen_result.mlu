@@ -26,7 +26,7 @@ __mlu_func__ static inline bool IsSuppressed(uint32_t *mask_row, int j) {
   constexpr uint32_t DEFAULT_MASK = 0x80000000;  // 0b 1000 0000 0000 0000
   return !(mask_row[pos_j] & (DEFAULT_MASK >> offset));
 }
-} // namespace
+}  // namespace
 
 template <OutputOrder OUTPUT_ORDER>
 __mlu_global__ void MLUGenNMSResult(int input_boxes_num,

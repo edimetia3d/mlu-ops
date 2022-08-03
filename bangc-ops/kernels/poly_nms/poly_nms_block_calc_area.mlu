@@ -66,12 +66,11 @@ __mlu_func__ static inline void Area(float *__restrict__ nram_tile_beg,
 }
 
 #if __BANG_ARCH__ >= 300
-__mlu_func__ static inline void MLUCalcArea300(const float *__restrict__ input_boxes,
-                                               int input_boxes_num,
-                                               int real_width,
-                                               float *__restrict__ boxes_area)  {
+__mlu_func__ static inline void MLUCalcArea300(
+    const float *__restrict__ input_boxes, int input_boxes_num, int real_width,
+    float *__restrict__ boxes_area) {
   // nram: | load_buffer(area_buffer) | transpose_buffer |
- // A core will handle at most core_box_num data
+  // A core will handle at most core_box_num data
   int core_box_num = 0;
   int box_i_beg = 0;
   GetCoreWorkingSet(input_boxes_num, &core_box_num, &box_i_beg);
@@ -79,7 +78,8 @@ __mlu_func__ static inline void MLUCalcArea300(const float *__restrict__ input_b
   int i_tile_size = CALC_AREA_NRAM_FLT_CAP / 8 / 2;
   float *load_buffer = nram_mlu_calc_area;
   float *transpose_buffer = load_buffer + i_tile_size * 8;
-  // We will divide `core_box_num * 8` data by row,  into K tiles of `i_tile_size * 8`
+  // We will divide `core_box_num * 8` data by row,  into K tiles of
+  // `i_tile_size * 8`
   i_tile_size = MIN(i_tile_size, core_box_num);
   // reuse load_buffer after transpose
   float *area_buffer = load_buffer;
@@ -89,36 +89,35 @@ __mlu_func__ static inline void MLUCalcArea300(const float *__restrict__ input_b
     int this_i_tile_size = i_end - i_beg;
     const float *tile_dev_beg = input_boxes + i_beg * real_width;
 #ifdef _DEBUG
-    __bang_printf("task_i: %d offset_i_beg: %d tile size:%d \n", taskId, offset_i_beg, this_i_tile_size);
+    __bang_printf("task_i: %d offset_i_beg: %d tile size:%d \n", taskId,
+                  offset_i_beg, this_i_tile_size);
 #endif
     // load boxes data into nram and remove padding
-    __memcpy(load_buffer,
-             tile_dev_beg,
-             8 * sizeof(float),
-             GDRAM2NRAM,
-             8 * sizeof(float),
-             real_width * sizeof(float),
+    __memcpy(load_buffer, tile_dev_beg, 8 * sizeof(float), GDRAM2NRAM,
+             8 * sizeof(float), real_width * sizeof(float),
              this_i_tile_size - 1);
     __bang_transpose(transpose_buffer, load_buffer, this_i_tile_size, 8);
     Area(transpose_buffer, this_i_tile_size, area_buffer);
-    __memcpy(boxes_area + i_beg, area_buffer, this_i_tile_size * sizeof(float), NRAM2GDRAM);
+    __memcpy(boxes_area + i_beg, area_buffer, this_i_tile_size * sizeof(float),
+             NRAM2GDRAM);
   }
 }
 #else
 
-#define FLT_ALIGN_CEIL(v) ((v + (NFU_ALIGN_FLT_NUM - 1)) / NFU_ALIGN_FLT_NUM * NFU_ALIGN_FLT_NUM)
+#define FLT_ALIGN_CEIL(v) \
+  ((v + (NFU_ALIGN_FLT_NUM - 1)) / NFU_ALIGN_FLT_NUM * NFU_ALIGN_FLT_NUM)
 
-__mlu_func__ static inline void MLUCalcArea200(const float *__restrict__ input_boxes,
-                                               int input_boxes_num,
-                                               int real_width,
-                                               float *__restrict__ boxes_area) {
+__mlu_func__ static inline void MLUCalcArea200(
+    const float *__restrict__ input_boxes, int input_boxes_num, int real_width,
+    float *__restrict__ boxes_area) {
   // A core will handle at most core_box_num data
   int core_box_num = 0;
   int box_i_beg = 0;
   GetCoreWorkingSet(input_boxes_num, &core_box_num, &box_i_beg);
 
   constexpr int NFU_ALIGN_FLT_NUM = NFU_ALIGN_SIZE / sizeof(float);
-  constexpr int I_LIMIT = CALC_AREA_NRAM_SIZE / NFU_ALIGN_SIZE / NFU_ALIGN_FLT_NUM / 2 * NFU_ALIGN_FLT_NUM;
+  constexpr int I_LIMIT = CALC_AREA_NRAM_SIZE / NFU_ALIGN_SIZE /
+                          NFU_ALIGN_FLT_NUM / 2 * NFU_ALIGN_FLT_NUM;
   constexpr int J_LIMIT = NFU_ALIGN_FLT_NUM / 8;
 
   // split nram to two equal part, half for loading, half for transpose
@@ -141,21 +140,15 @@ __mlu_func__ static inline void MLUCalcArea200(const float *__restrict__ input_b
       if (this_load_box_num <= 0) {
         break;
       }
-      __memcpy(load_buffer + j * 8,
-               tile_dev_beg,
-               8 * sizeof(float),
-               GDRAM2NRAM,
-               NFU_ALIGN_SIZE,
-               real_width * sizeof(float),
+      __memcpy(load_buffer + j * 8, tile_dev_beg, 8 * sizeof(float), GDRAM2NRAM,
+               NFU_ALIGN_SIZE, real_width * sizeof(float),
                this_load_box_num - 1);
       this_load_box_num = MIN(this_ele_num - (j + 1) * I_LIMIT, I_LIMIT);
       tile_dev_beg += I_LIMIT * real_width;
     }
 
     int transpose_width = FLT_ALIGN_CEIL(MIN(I_LIMIT, this_ele_num));
-    __bang_transpose(transpose_buffer,
-                     load_buffer,
-                     transpose_width,
+    __bang_transpose(transpose_buffer, load_buffer, transpose_width,
                      NFU_ALIGN_FLT_NUM);
 
     j = 0;
@@ -163,8 +156,10 @@ __mlu_func__ static inline void MLUCalcArea200(const float *__restrict__ input_b
       if (this_load_box_num <= 0) {
         break;
       }
-      Area(transpose_buffer + j * transpose_width * 8, transpose_width, area_buffer);
-      __memcpy(boxes_area + i_beg + j * I_LIMIT, area_buffer, this_load_box_num * sizeof(float), NRAM2GDRAM);
+      Area(transpose_buffer + j * transpose_width * 8, transpose_width,
+           area_buffer);
+      __memcpy(boxes_area + i_beg + j * I_LIMIT, area_buffer,
+               this_load_box_num * sizeof(float), NRAM2GDRAM);
       this_load_box_num = MIN(this_ele_num - (j + 1) * I_LIMIT, I_LIMIT);
     }
   }
@@ -173,11 +168,10 @@ __mlu_func__ static inline void MLUCalcArea200(const float *__restrict__ input_b
 }  // namespace
 
 __mlu_global__ void MLUCalcArea(const float *__restrict__ input_boxes,
-                                int input_boxes_num,
-                                int real_width,
+                                int input_boxes_num, int real_width,
                                 float *__restrict__ boxes_area) {
 #if __BANG_ARCH__ >= 300
-  return MLUCalcArea300(input_boxes,input_boxes_num,real_width,boxes_area);
+  return MLUCalcArea300(input_boxes, input_boxes_num, real_width, boxes_area);
 #else
   return MLUCalcArea200(input_boxes, input_boxes_num, real_width, boxes_area);
 #endif
