@@ -27,7 +27,7 @@ static inline int64_t GetMaskColNum(int box_num) {
 static inline int64_t GetMaskMatrixByteSize(int box_num) {
   return box_num * GetMaskColNum(box_num) * sizeof(uint32_t);
 }
-} // namespace
+}  // namespace
 
 mluOpStatus_t MLUOP_WIN_API mluOpGetPolyNmsWorkspaceSize(
     mluOpHandle_t handle, const mluOpTensorDescriptor_t boxes_desc,
@@ -93,7 +93,7 @@ mluOpPolyNms(mluOpHandle_t handle, const mluOpTensorDescriptor_t boxes_desc,
   int real_width = boxes_desc->strides[0];
   auto mask_col_num = GetMaskColNum(box_num);
   if ((10 * box_num + mask_col_num * 2) > (MAX_NRAM_SIZE / sizeof(float))) {
-    assert(false && "Too many input boxes, MLUGenNMSMask cannot work");
+    VLOG(5) << API << " Too many input boxes, MLUGenNMSMask cannot work";
     return MLUOP_STATUS_EXECUTION_FAILED;
   }
 
