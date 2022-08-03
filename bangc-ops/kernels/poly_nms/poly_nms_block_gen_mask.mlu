@@ -93,7 +93,6 @@ __mlu_func__ static inline void MLUGenNMSMaskImpl(
   box_i_end = box_i_end < input_boxes_num ? box_i_end : input_boxes_num;
 
   __sync_io();
-  // __asm__ volatile("sync;");
 
   for (int i = box_i_beg; i < box_i_end; i += 1) {
     int i_pos = 0;

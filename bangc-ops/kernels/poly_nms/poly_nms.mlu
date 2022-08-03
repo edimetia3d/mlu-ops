@@ -27,7 +27,8 @@ static inline int64_t GetMaskColNum(int box_num) {
 static inline int64_t GetMaskMatrixByteSize(int box_num) {
   return box_num * GetMaskColNum(box_num) * sizeof(uint32_t);
 }
-}
+} // namespace
+
 mluOpStatus_t MLUOP_WIN_API mluOpGetPolyNmsWorkspaceSize(
     mluOpHandle_t handle, const mluOpTensorDescriptor_t boxes_desc,
     size_t *size) {
