@@ -27,11 +27,11 @@ template <PointDirection POINT_DIR>
 __mlu_func__ static inline float IOU(
 #else
 template <PointDirection POINT_DIR>
-__mlu_device__  __attribute__((noinline)) static float IOU(
+__mlu_func__ static inline float IOU(
 #endif
     const QuadClipBox<POINT_DIR> *__restrict__ clipbox,
-    const float *__restrict__ box_j, float area_i, float area_j) {
-  float intersect = IntersectArea<POINT_DIR>(box_j, clipbox);
+    const float *__restrict__ box_j, float area_i, float area_j,bool debug) {
+  float intersect = IntersectArea<POINT_DIR>(box_j, clipbox,debug);
   return intersect / (area_i + area_j - intersect);
 }
 
@@ -119,9 +119,16 @@ __mlu_func__ static inline void MLUGenNMSMaskImpl(
         if (score_i == score_j) {
           i_pos += (j < i);
         } else {
-          float iou = IOU(&clip_box, box_j, area_buffer[i], area_buffer[j]);
+          bool debug = taskId == 2 && i == 23 && j ==92;
+          if(debug){
+              printf("iou enter %d, i %d , j %d\n",taskId,i,j);
+          }
+          float iou = IOU(&clip_box, box_j, area_buffer[i], area_buffer[j],debug);
           if (iou > threshold) {
             MaySuppress(mask_buffer, j);
+          }
+          if(debug){
+              printf("iou quit %d, i %d , j %d\n", taskId, i, j);
           }
         }
       }

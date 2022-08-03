@@ -132,7 +132,7 @@ __mlu_func__ static inline float Area(const Point2D *__restrict__ points,
 
 template <int CUTLINE_N, PointDirection POINT_DIR>
 __mlu_func__ static inline float ClipArea(
-    const float *__restrict__ box_i, const Line *__restrict__ clip_box_lines) {
+    const float *__restrict__ box_i, const Line *__restrict__ clip_box_lines,bool debug) {
   constexpr int MAX_POINT = CUTLINE_N + 4;
   Point2D p_swap0[MAX_POINT];
   Point2D p_swap1[MAX_POINT];
@@ -155,13 +155,22 @@ __mlu_func__ static inline float ClipArea(
     const Line *cut_line = &clip_box_lines[i];
     bool prev_inner = IsInner<POINT_DIR>(cut_line, p + n - 1);
     for (int j = 0; j < n; ++j) {
+        if (debug) {
+            printf("enter clip %d %d\n", i, j);
+        }
       Point2D *current_point = p + j;
       Point2D *prev_point = p + (j - 1 + n) % n;
       bool current_inner = IsInner<POINT_DIR>(cut_line, current_point);
       if (current_inner) {
         if (!prev_inner) {
+           if (debug) {
+              printf("good here\n");
+           }
           Cross(cut_line, prev_point, current_point, &p_next[new_n].x,
                 &p_next[new_n].y);
+          if (debug) {
+             printf("bad here\n");
+          }
           ++new_n;
         }
         p_next[new_n].x = current_point->x;
@@ -185,13 +194,19 @@ __mlu_func__ static inline float ClipArea(
 template <PointDirection POINT_DIR>
 __mlu_func__ inline float IntersectArea(
     const float *__restrict__ box_i,
-    const QuadClipBox<POINT_DIR> *__restrict__ clip_box) {
+    const QuadClipBox<POINT_DIR> *__restrict__ clip_box, bool debug) {
   float area = 0;
   if (clip_box->is_convex) {
-    area = ClipArea<4, POINT_DIR>(box_i, clip_box->line);
+      if(debug){
+          printf("convex\n");
+      }
+    area = ClipArea<4, POINT_DIR>(box_i, clip_box->line,debug);
   } else {
-    area = ClipArea<3, POINT_DIR>(box_i, clip_box->line);
-    area += ClipArea<3, POINT_DIR>(box_i, &clip_box->line[3]);
+      if(debug){
+          printf("non-convex\n");
+      }
+    area = ClipArea<3, POINT_DIR>(box_i, clip_box->line,debug);
+    area += ClipArea<3, POINT_DIR>(box_i, &clip_box->line[3],debug);
   }
 
   return area > 0 ? area : -area;
