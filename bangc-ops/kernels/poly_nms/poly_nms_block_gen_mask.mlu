@@ -22,8 +22,13 @@ namespace {
 
 __nram__ float nram_gen_mask[CALC_GENMASK_NRAM_FLT_CAP];
 
+#if __BANG_ARCH__ >= 300
 template <PointDirection POINT_DIR>
 __mlu_func__ static inline float IOU(
+#else
+template <PointDirection POINT_DIR>
+__mlu_device__  __attribute__((noinline)) static float IOU(
+#endif
     const QuadClipBox<POINT_DIR> *__restrict__ clipbox,
     const float *__restrict__ box_j, float area_i, float area_j) {
   float intersect = IntersectArea<POINT_DIR>(box_j, clipbox);
@@ -52,7 +57,7 @@ __mlu_func__ static inline void MLUGenNMSMaskImpl(
     const float *__restrict__ input_boxes, int input_boxes_num, int real_width,
     float threshold, const float *__restrict__ boxes_area, uint32_t *mask,
     int *sort_info) {
-  // support larger size.
+  // TODO: support larger size.
   int mask_col_num = (input_boxes_num + MASK_T_BITWIDTH - 1) / MASK_T_BITWIDTH;
 
   // nram: | box_buffer    | area_buffer | mask_buffer  | mask_buffer_swap |
@@ -69,7 +74,7 @@ __mlu_func__ static inline void MLUGenNMSMaskImpl(
   int area_buffer_num = input_boxes_num;
 #if __BANG_ARCH__ < 300
   const int align_num = NFU_ALIGN_SIZE / sizeof(uint32_t);
-  box_buffer_num = CEIL_ALIGN(input_boxes_num * 9, 32);
+  box_buffer_num = CEIL_ALIGN(input_boxes_num * 9, align_num);
   mask_buffer_num = CEIL_ALIGN(mask_col_num, align_num);
   area_buffer_num = CEIL_ALIGN(area_buffer_num, align_num);
 #endif
@@ -123,13 +128,16 @@ __mlu_func__ static inline void MLUGenNMSMaskImpl(
     }
     __memcpy(mask + i * mask_col_num, mask_buffer,
              mask_col_num * sizeof(uint32_t), NRAM2GDRAM);
-    ((int *)sort_info)[i_pos] = i;
+#if __BANG_ARCH__ < 300
+      ((int *)sort_info)[i_pos] = i;
+#else
+      __memcpy_async(sort_info + i_pos, &i, sizeof(int), NRAM2GDRAM);
+#endif
     uint32_t *tmp = mask_buffer;
     mask_buffer = mask_buffer_swap;
     mask_buffer_swap = tmp;
     __bang_write_value(mask_buffer_swap, mask_buffer_num,
                        default_mask_v);  // reset to all 1
-    __sync_compute();
   }
 }
 
