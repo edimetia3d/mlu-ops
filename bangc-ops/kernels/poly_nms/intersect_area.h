@@ -29,6 +29,10 @@
 #include "kernels/poly_nms/enums.h"
 
 namespace {  // NOLINT
+constexpr uint32_t BIT_FLOAT_1 = 0x0;
+constexpr uint32_t BIT_FLOAT_NEG_1 = 0x80000000;
+#define BIT_FLOAT_MUL(x,y) ((x)^(y))
+
 #define EPSILON 1e-12
 struct Point2D {
   float x;
@@ -47,38 +51,53 @@ struct Line {
   float c;
 };
 
-template <PointDirection DIR>
+__mlu_func__ static uint32_t GetDirection(const Point2D *__restrict__ A) {
+  float x0 = A[2].x - A[0].x;
+  float y0 = A[2].y - A[0].y;
+  float x1 = A[3].x - A[1].x;
+  float y1 = A[3].y - A[1].y;
+  if( (x0 * y1 - y0 * x1) < 0){
+    return BIT_FLOAT_1;
+  }
+  else{
+    return BIT_FLOAT_NEG_1;
+  }
+}
+
+union FP32U32{
+  float fp32;
+  uint32_t u32;
+};
+
 __mlu_func__ static bool IsInner(const Line *__restrict__ line,
-                                 const Point2D *__restrict__ c);
-
-template <>
-__mlu_func__ bool IsInner<PointDirection::CW>(const Line *__restrict__ line,
-                                              const Point2D *__restrict__ c) {
-  return (line->b * c->y + line->a * c->x - line->c + EPSILON) > 0;
+                                 const Point2D *__restrict__ c,
+                                 uint32_t direction) {
+  FP32U32 eps;
+  eps.fp32 = EPSILON;
+  eps.u32 = BIT_FLOAT_MUL(eps.u32,direction);
+  FP32U32 result;
+  result.fp32= (line->b * c->y + line->a * c->x - line->c + eps.fp32);
+  result.u32 = BIT_FLOAT_MUL(result.u32,direction);
+  return result.fp32 > 0;
 }
 
-template <>
-__mlu_func__ bool IsInner<PointDirection::CCW>(const Line *__restrict__ line,
-                                               const Point2D *__restrict__ c) {
-  return (line->b * c->y + line->a * c->x - line->c - EPSILON) < 0;
-}
 
-template <PointDirection POINT_DIR>
 struct QuadClipBox {
   __mlu_func__ void AddLines(const Point2D *__restrict__ A) {
+    direction = GetDirection(A);
     line[0].Update(A, A + 1);
     Point2D centerAC = {(A[0].x + A[2].x) / 2, (A[0].y + A[2].y) / 2};
     bool ACFine = false;
 
-    if (IsInner<POINT_DIR>(&line[0], &centerAC)) {
+    if (IsInner(&line[0], &centerAC, direction)) {
       line[5].Update(A + 3, A);
-      if (IsInner<POINT_DIR>(&line[5], &centerAC)) {
+      if (IsInner(&line[5], &centerAC, direction)) {
         ACFine = true;
       }
       Point2D centerBD = {(A[1].x + A[3].x) / 2, (A[1].y + A[3].y) / 2};
       line[1].Update(A + 1, A + 2);
-      if (ACFine && IsInner<POINT_DIR>(&line[0], &centerBD) &&
-          IsInner<POINT_DIR>(&line[1], &centerBD)) {
+      if (ACFine && IsInner(&line[0], &centerBD, direction) &&
+          IsInner(&line[1], &centerBD, direction)) {
         is_convex = true;
         return NoSplit(A);
       }
@@ -109,6 +128,7 @@ struct QuadClipBox {
     line[5].Update(A + 3, A + 1);
   }
   Line line[6];
+  uint32_t direction;
   bool is_convex = false;
 };
 
@@ -140,13 +160,18 @@ __mlu_func__ static float Area(const Point2D *__restrict__ points, int n) {
     x0 = x1;
     y0 = y1;
   }
-  return area / 2;
+  area = area / 2;
+  FP32U32 result;
+  result.fp32 = area;
+  result.u32 = (result.u32 & 0x7FFFFFFF);
+  return result.fp32;
 }
 
-template <int CUTLINE_N, PointDirection POINT_DIR>
+template <int CUTLINE_N>
 __mlu_func__ static float ClipArea(const float *__restrict__ box_i,
-                                   const Line *__restrict__ clip_box_lines) {
-  constexpr int MAX_POINT = CUTLINE_N + 4;
+                                   const Line *__restrict__ clip_box_lines,
+                                   uint32_t direction) {
+  constexpr int MAX_POINT = 8;
   Point2D p_swap0[MAX_POINT];
   Point2D p_swap1[MAX_POINT];
   Point2D *p = p_swap0;
@@ -166,11 +191,11 @@ __mlu_func__ static float ClipArea(const float *__restrict__ box_i,
     p = tmp;
     int new_n = 0;
     const Line *cut_line = &clip_box_lines[i];
-    bool prev_inner = IsInner<POINT_DIR>(cut_line, p + n - 1);
+    bool prev_inner = IsInner(cut_line, p + n - 1, direction);
     for (int j = 0; j < n; ++j) {
       Point2D *current_point = p + j;
       Point2D *prev_point = p + (j - 1 + n) % n;
-      bool current_inner = IsInner<POINT_DIR>(cut_line, current_point);
+      bool current_inner = IsInner(cut_line, current_point, direction);
       if (current_inner) {
         if (!prev_inner) {
           Cross(cut_line, prev_point, current_point, &p_next[new_n].x,
@@ -195,19 +220,18 @@ __mlu_func__ static float ClipArea(const float *__restrict__ box_i,
   return Area(p_next, n);
 }
 
-template <PointDirection POINT_DIR>
 __mlu_func__ float IntersectArea(
     const float *__restrict__ box_i,
-    const QuadClipBox<POINT_DIR> *__restrict__ clip_box) {
+    const QuadClipBox *__restrict__ clip_box) {
   float area = 0;
   if (clip_box->is_convex) {
-    area = ClipArea<4, POINT_DIR>(box_i, clip_box->line);
+    area = ClipArea<4>(box_i, clip_box->line,clip_box->direction);
   } else {
-    area = ClipArea<3, POINT_DIR>(box_i, clip_box->line);
-    area += ClipArea<3, POINT_DIR>(box_i, &clip_box->line[3]);
+    area = ClipArea<3>(box_i, clip_box->line,clip_box->direction);
+    area += ClipArea<3>(box_i, &clip_box->line[3],clip_box->direction);
   }
 
-  return area > 0 ? area : -area;
+  return area;
 }
 }  // namespace
 #endif  // BANGC_OPS_KERNELS_POLY_NMS_INTERSECT_AREA_H
