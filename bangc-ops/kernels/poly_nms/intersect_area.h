@@ -171,7 +171,7 @@ template <int CUTLINE_N>
 __mlu_func__ static float ClipArea(const float *__restrict__ box_i,
                                    const Line *__restrict__ clip_box_lines,
                                    uint32_t direction) {
-  constexpr int MAX_POINT = 8;
+  constexpr int MAX_POINT = CUTLINE_N + 5;
   Point2D p_swap0[MAX_POINT];
   Point2D p_swap1[MAX_POINT];
   Point2D *p = p_swap0;
